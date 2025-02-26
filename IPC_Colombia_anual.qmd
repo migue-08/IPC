@@ -1,0 +1,159 @@
+---
+title: "CPI Colombia"
+subtitle: "Total and Core inflation"
+date: today
+author: "Miguel Martinez"
+format: 
+  html:
+    toc: true
+    theme: cosmo
+editor: visual
+execute:
+  warning: false
+---
+
+This document describes the process of building different line graphs of the evolution of total and core inflation (without foods, energy and other regulated) according to the Consumer Price Index ([CPI](https://www.dane.gov.co/index.php/estadisticas-por-tema/precios-y-costos/indice-de-precios-al-consumidor-ipc)) in Colombia which is made public by the Departamento Administrativo Nacional de Colombia ([DANE](https://www.dane.gov.co/)).
+
+The first step is to load the following libraries:
+
+```{r}
+library(readxl)
+library(tidyverse)
+```
+
+## Load data
+
+Now, we are loading total inflation data:
+
+```{r}
+
+data = read_excel("IPC_2020_2024.xlsx")
+
+data
+```
+
+Then we load the core inflation data:
+
+```{r}
+
+datacore = read_excel("IPC_2020_2024_sinAliniReg.xlsx")
+
+datacore
+```
+
+Now we are going to reshape the total inflation's database in order to represent individual values by a single row (*stacked*). In addition, because of symmetry we are going to represent the year variable as a numeric type with the `names_transform` function of `pivot_longer`:
+
+```{r}
+
+data = pivot_longer(data, cols = 2:7, names_to = "Año",
+                    values_to = "Inflacion_total",
+                    names_transform = list("Año" = as.numeric))
+
+data
+```
+
+Now you can see with the help of the `str` function that all the variables are numeric:
+
+```{r}
+str(data)
+```
+
+```{r}
+str(datacore)
+```
+
+Since core inflation's data is lagged 1 period regarding to total inflation, we are joining both databases with `left_join` function of `dplyr`:
+
+```{r}
+
+data2 = left_join(data, datacore, by = join_by(Año, Mes))
+
+data2
+```
+
+As before, we are reshaping the data to the *long* or *stacked* format:
+
+```{r}
+
+data2 = pivot_longer(data2, cols = 3:4, names_to = "Inflation_type",
+                     values_to = "value")
+
+data2
+```
+
+## Total inflation
+
+```{r}
+
+shadedarea <- 3  #Targeting inflation by Colombian Central bank
+
+ggplot(data) +
+  geom_point(aes(x = Mes, y = Inflacion_total)) +
+  geom_line(aes(x = Mes, y = Inflacion_total)) +
+  geom_hline(yintercept = shadedarea, color = "grey", lwd = 20, alpha = 0.4) +
+  facet_grid( . ~ Año) +
+  scale_x_continuous(breaks = seq(0,12, by=2)) +
+  scale_y_continuous(breaks = seq(0,15, by=1)) +
+  theme_classic() +
+  labs(title = "Índice de precios al consumidor, 2020-2025",
+       subtitle = "(variación anual, fin de periodo)",
+       x = "Meses",
+       y = "Variación (%)",
+       caption = "Fuente: Elaboración propia con datos del DANE, IPC") +
+  theme(plot.caption.position = "panel",
+        plot.caption = element_text(hjust = 0))
+
+```
+
+## Core inflation
+
+```{r}
+
+shadedarea <- 3  #Targeting inflation by Colombian Central bank
+
+ggplot(datacore) +
+  geom_point(aes(x = Mes, y = Inflacion_core)) +
+  geom_line(aes(x = Mes, y = Inflacion_core)) +
+  geom_hline(yintercept = shadedarea, color = "grey", lwd = 22, alpha = 0.4) +
+  facet_grid( . ~ Año) +
+  scale_x_continuous(breaks = seq(0,12, by=2)) +
+  scale_y_continuous(breaks = seq(0,12, by=1)) +
+  theme_classic() +
+  labs(title = "Índice de precios al consumidor sin alimentos ni regulados, 2020-2024",
+       subtitle = "(variación anual, fin de periodo)",
+       x = "Meses",
+       y = "Variación (%)",
+       caption = "Fuente: Elaboración propia con datos del DANE, IPC") +
+  theme(plot.caption.position = "panel",
+        plot.caption = element_text(hjust = 0))
+
+```
+
+## Total and core inflation
+
+```{r}
+
+shadedarea <- 3  #Targeting inflation by Colombian Central bank
+
+ggplot(data2) +
+  geom_point(aes(x = Mes, y = value, colour = Inflation_type)) +
+  geom_line(aes(x = Mes, y = value, colour = Inflation_type)) +
+  geom_hline(yintercept = shadedarea, color = "grey", lwd = 16, alpha = 0.4) +
+  facet_grid( . ~ Año) +
+  scale_x_continuous(breaks = seq(0,12, by=2)) +
+  scale_y_continuous(breaks = seq(0,14, by=1)) +
+  theme_classic() +
+  labs(title = "Índice de precios al consumidor total y sin Alimentos ni Regulados, 2020-2025",
+       subtitle = "(variación anual, fin de periodo)",
+       x = "Meses",
+       y = "Variación (%)",
+       caption = "Fuente: Elaboración propia con datos del DANE, IPC") +
+  theme(plot.caption.position = "panel",
+        plot.caption = element_text(hjust = 0),
+        legend.position = "bottom")
+
+```
+
+## Conclusion
+
+As you can see in the hard years of the pandemic (2020, 2021) the inflation measurements remained quite stable in the targeting inflation policy by the independent Colombian central bank: Banco de la República ([Banrep](https://www.banrep.gov.co/es/glosario/inflacion-objetivo)) or even a few periods below the targeting (represented by the gray shaded area). Although the following years due to the rebound effect of the national economy, we are still observing high inflation in the goods and services of the economy. This is an ongoing concern because this not only affect households, but also companies, governments and other agents in the economy. In other hand, the Colombian Banrep board of directors are expecting the return of the targeting inflation in the year 2025 according to the [last minutes](https://www.banrep.gov.co/es/noticias/minutas-banrep-enero-2025).
