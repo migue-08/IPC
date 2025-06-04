@@ -12,84 +12,158 @@ execute:
   warning: false
 ---
 
-This document describes the process of building different line graphs of the evolution of total and core inflation (without foods, energy and other regulated) according to the Consumer Price Index ([CPI](https://www.dane.gov.co/index.php/estadisticas-por-tema/precios-y-costos/indice-de-precios-al-consumidor-ipc)) in Colombia which is made public by the Departamento Administrativo Nacional de Colombia ([DANE](https://www.dane.gov.co/)).
+This document describes the process of building different visualizations of the evolution of the total and core inflation (inflation without foods, energy and other regulated) according to the Consumer Price Index (CPI) in Colombia which is made public by the Departamento Administrativo Nacional de Colombia ([DANE](https://www.dane.gov.co/)). You can download the data [here](https://www.dane.gov.co/index.php/estadisticas-por-tema/precios-y-costos/indice-de-precios-al-consumidor-ipc):
 
 The first step is to load the following libraries:
 
 ```{r}
+
 library(readxl)
 library(tidyverse)
 ```
 
 ## Load data
 
-Now, we are loading total inflation data:
+Now, we are going to load the data:
 
 ```{r}
 
-data = read_excel("IPC.xlsx")
+# Total inflation
 
-data
+df1 = readxl::read_excel("anex-IPC-Indices-abr2025.xlsx",
+                         sheet = "IndicesIPC",
+                         range = "A9:X21",
+                         col_names = TRUE)
+
+# Core inflation
+
+df2 = readxl::read_excel("anex-IPC-sinAlimentosRegulados-mar2025.xlsx",
+                         sheet = "2",
+                         range = "A7:F83",
+                         col_names = TRUE)
+
 ```
 
-Then we load the core inflation data:
+## Indexing, renaming and dtype transformation
 
 ```{r}
 
-datacore = read_excel("IPC_sinAliniReg.xlsx")
+# Now we are going to omit some rows, rename some columns, and set columns as numeric
 
-datacore
+df2 = df2[-c(1:12), ] |>
+  dplyr::rename(
+    `Variacion Mensual` = 4,
+    `Variacion Año corrido` = 5,
+    `Variacion Anual` = 6) |> 
+  dplyr::mutate_at(vars(4:6), as.numeric)
+
 ```
 
-Now we are going to reshape the total inflation's database in order to represent individual values by a single row (*stacked*). In addition, because of symmetry we are going to represent the year variable as a numeric type with the `names_transform` function of `pivot_longer`:
+## Reshape and dtype transformation
+
+Now we are going to reshape the total inflation's database in order to represent individual values by a single row (*stacked*)
 
 ```{r}
 
-data = pivot_longer(data, cols = 2:7, names_to = "Año",
-                    values_to = "Inflacion_total",
-                    names_transform = list("Año" = as.numeric))
+df1 = df1 |> 
+  tidyr::pivot_longer(cols = `2003`:`2025`,
+                      names_to = "Año") |> 
+  dplyr::mutate_at(vars(Año), as.numeric)
 
-data
+df1
 ```
 
-Now you can see with the help of the `str` function that all the variables are numeric:
+## Percentage change
+
+Since total CPI is expresed in levels, we are going to compute the percentage change.
 
 ```{r}
-str(data)
+
+df1 = df1 |>
+  dplyr::mutate(
+    value = (value / lag(value, n = 1) - 1) * 100)
+
 ```
 
-```{r}
-str(datacore)
-```
+## Merging Dataframes
 
 Since core inflation's data is lagged 1 period regarding to total inflation, we are joining both databases with `left_join` function of `dplyr`:
 
 ```{r}
 
-data2 = left_join(data, datacore, by = join_by(Año, Mes))
+data = df1 |>
+  na.omit() |> 
+  dplyr::left_join(df2,
+                   by = join_by(Año, Mes),
+                   suffix = c(".Total", ".Core"))
 
-data2
+data
 ```
+
+## Reshape, rename and transform
 
 As before, we are reshaping the data to the *long* or *stacked* format:
 
 ```{r}
 
-data2 = pivot_longer(data2, cols = 3:4, names_to = "Inflation_type",
-                     values_to = "value")
+data = data |> 
+  dplyr::select(Mes, Año, value, `Variacion Anual`) |> 
+  dplyr::rename(
+     Inflacion_total = value,
+     Inflacion_core = `Variacion Anual`) |> 
+  tidyr::pivot_longer(cols = 3:4,
+                      names_to = "Inflation_type",
+                      values_to = "value") |> 
+  dplyr::mutate(
+    Mes = recode(Mes,
+                 "Enero" = 01, "Febrero" = 02,
+                 "Marzo" = 03, "Abril" = 04,
+                 "Mayo" = 05, "Junio" = 06,
+                 "Julio" = 07, "Agosto" = 08,
+                 "Septiembre" = 09, "Octubre" = 10,
+                 "Noviembre" = 11, "Diciembre" = 12))
 
-data2
+data
+```
+
+## Filtering
+
+```{r}
+
+# We filter the data from 2020
+
+data = data |> 
+  dplyr::filter(Año >= 2020)
 ```
 
 ## Total inflation
 
 ```{r}
 
+# Before we need to rename, filter, and transform 'Mes' in df1
+
+df1 = df1 |> 
+  dplyr::rename(Inflacion_total = value) |> 
+  dplyr::filter(Año >= 2020) |> 
+  dplyr::mutate(
+    Mes = recode(Mes,
+                 "Enero" = 01, "Febrero" = 02,
+                 "Marzo" = 03, "Abril" = 04,
+                 "Mayo" = 05, "Junio" = 06,
+                 "Julio" = 07, "Agosto" = 08,
+                 "Septiembre" = 09, "Octubre" = 10,
+                 "Noviembre" = 11, "Diciembre" = 12))
+
+```
+
+```{r}
+
 shadedarea <- 3  #Targeting inflation by Colombian Central bank
 
-ggplot(data) +
-  geom_point(aes(x = Mes, y = Inflacion_total)) +
-  geom_line(aes(x = Mes, y = Inflacion_total)) +
+df1 |> 
+ggplot(aes(x = Mes, y = Inflacion_total)) +
+  geom_point() +
+  geom_line() +
   geom_hline(yintercept = shadedarea, color = "grey", lwd = 20, alpha = 0.4) +
   facet_grid( . ~ Año) +
   scale_x_continuous(breaks = seq(0,12, by=2)) +
@@ -109,11 +183,31 @@ ggplot(data) +
 
 ```{r}
 
+# First we need to select, rename, filter, and transform 'Mes' in df2
+
+df2 = df2 |>
+  dplyr::select(Año, Mes, `Variacion Anual`) |> 
+  dplyr::rename(Inflacion_core = `Variacion Anual`) |> 
+  dplyr::filter(Año >= 2020) |> 
+  dplyr::mutate(
+    Mes = recode(Mes,
+                 "Enero" = 01, "Febrero" = 02,
+                 "Marzo" = 03, "Abril" = 04,
+                 "Mayo" = 05, "Junio" = 06,
+                 "Julio" = 07, "Agosto" = 08,
+                 "Septiembre" = 09, "Octubre" = 10,
+                 "Noviembre" = 11, "Diciembre" = 12))
+
+```
+
+```{r}
+
 shadedarea <- 3  #Targeting inflation by Colombian Central bank
 
-ggplot(datacore) +
-  geom_point(aes(x = Mes, y = Inflacion_core)) +
-  geom_line(aes(x = Mes, y = Inflacion_core)) +
+df2 |> 
+ggplot(aes(x = Mes, y = Inflacion_core)) +
+  geom_point() +
+  geom_line() +
   geom_hline(yintercept = shadedarea, color = "grey", lwd = 22, alpha = 0.4) +
   facet_grid( . ~ Año) +
   scale_x_continuous(breaks = seq(0,12, by=2)) +
@@ -135,9 +229,10 @@ ggplot(datacore) +
 
 shadedarea <- 3  #Targeting inflation by Colombian Central bank
 
-ggplot(data2) +
-  geom_point(aes(x = Mes, y = value, colour = Inflation_type)) +
-  geom_line(aes(x = Mes, y = value, colour = Inflation_type)) +
+data |> 
+ggplot(aes(x = Mes, y = value, colour = Inflation_type)) +
+  geom_point() +
+  geom_line() +
   geom_hline(yintercept = shadedarea, color = "grey", lwd = 16, alpha = 0.4) +
   facet_grid( . ~ Año) +
   scale_x_continuous(breaks = seq(0,12, by=2)) +
