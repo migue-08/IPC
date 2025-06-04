@@ -92,10 +92,9 @@ Since core inflation's data is lagged 1 period regarding to total inflation, we 
 ```{r}
 
 data = df1 |>
-  na.omit() |> 
+  tidyr::drop_na() |> 
   dplyr::left_join(df2,
-                   by = join_by(Año, Mes),
-                   suffix = c(".Total", ".Core"))
+                   by = join_by(Año, Mes))
 
 data
 ```
