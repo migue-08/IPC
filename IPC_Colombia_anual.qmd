@@ -20,6 +20,7 @@ The first step is to load the following libraries:
 
 library(readxl)
 library(tidyverse)
+library(janitor)
 ```
 
 ## Load data
@@ -30,18 +31,17 @@ Now, we are going to load the data:
 
 # Total inflation
 
-df1 = readxl::read_excel("anex-IPC-Indices-abr2025.xlsx",
+df1 = readxl::read_excel("anex-IPC-Indices-oct2025.xlsx",
                          sheet = "IndicesIPC",
                          range = "A9:X21",
                          col_names = TRUE)
 
 # Core inflation
 
-df2 = readxl::read_excel("anex-IPC-sinAlimentosRegulados-mar2025.xlsx",
+df2 = readxl::read_excel("anex-IPC-sinAlimentosRegulados-sep2025.xlsx",
                          sheet = "2",
-                         range = "A7:F83",
+                         range = "A7:F89",
                          col_names = TRUE)
-
 ```
 
 ## Indexing, renaming and dtype transformation
@@ -52,11 +52,11 @@ df2 = readxl::read_excel("anex-IPC-sinAlimentosRegulados-mar2025.xlsx",
 
 df2 = df2[-c(1:12), ] |>
   dplyr::rename(
-    `Variacion Mensual` = 4,
-    `Variacion Año corrido` = 5,
-    `Variacion Anual` = 6) |> 
+    variacion_mensual = 4,
+    variacion_ano_corrido = 5,
+    variacion_anual = 6) |>
+  janitor::clean_names() |>
   dplyr::mutate_at(vars(4:6), as.numeric)
-
 ```
 
 ## Reshape and dtype transformation
@@ -67,8 +67,9 @@ Now we are going to reshape the total inflation's database in order to represent
 
 df1 = df1 |> 
   tidyr::pivot_longer(cols = `2003`:`2025`,
-                      names_to = "Año") |> 
-  dplyr::mutate_at(vars(Año), as.numeric)
+                      names_to = "ano") |>
+  janitor::clean_names() |>
+  dplyr::mutate_at(vars(ano), as.numeric)
 
 df1
 ```
@@ -94,7 +95,7 @@ Since core inflation's data is lagged 1 period regarding to total inflation, we 
 data = df1 |>
   tidyr::drop_na() |> 
   dplyr::left_join(df2,
-                   by = join_by(Año, Mes))
+                   by = join_by(ano, mes))
 
 data
 ```
@@ -106,15 +107,15 @@ As before, we are reshaping the data to the *long* or *stacked* format:
 ```{r}
 
 data = data |> 
-  dplyr::select(Mes, Año, value, `Variacion Anual`) |> 
+  dplyr::select(mes, ano, value, variacion_anual) |> 
   dplyr::rename(
-     Inflacion_total = value,
-     Inflacion_core = `Variacion Anual`) |> 
+     inflacion_total = value,
+     inflacion_core = variacion_anual) |> 
   tidyr::pivot_longer(cols = 3:4,
-                      names_to = "Inflation_type",
+                      names_to = "inflation_type",
                       values_to = "value") |> 
   dplyr::mutate(
-    Mes = recode(Mes,
+    mes = recode(mes,
                  "Enero" = 01, "Febrero" = 02,
                  "Marzo" = 03, "Abril" = 04,
                  "Mayo" = 05, "Junio" = 06,
@@ -132,7 +133,7 @@ data
 # We filter the data from 2020
 
 data = data |> 
-  dplyr::filter(Año >= 2020)
+  dplyr::filter(ano >= 2020)
 ```
 
 ## Total inflation
@@ -142,10 +143,10 @@ data = data |>
 # Before we need to rename, filter, and transform 'Mes' in df1
 
 df1 = df1 |> 
-  dplyr::rename(Inflacion_total = value) |> 
-  dplyr::filter(Año >= 2020) |> 
+  dplyr::rename(inflacion_total = value) |> 
+  dplyr::filter(ano >= 2020) |> 
   dplyr::mutate(
-    Mes = recode(Mes,
+    mes = recode(mes,
                  "Enero" = 01, "Febrero" = 02,
                  "Marzo" = 03, "Abril" = 04,
                  "Mayo" = 05, "Junio" = 06,
@@ -160,11 +161,11 @@ df1 = df1 |>
 shadedarea <- 3  #Targeting inflation by Colombian Central bank
 
 df1 |> 
-ggplot(aes(x = Mes, y = Inflacion_total)) +
+ggplot(aes(x = mes, y = inflacion_total)) +
   geom_point() +
   geom_line() +
   geom_hline(yintercept = shadedarea, color = "grey", lwd = 20, alpha = 0.4) +
-  facet_grid( . ~ Año) +
+  facet_grid( . ~ ano) +
   scale_x_continuous(breaks = seq(0,12, by=2)) +
   scale_y_continuous(breaks = seq(0,15, by=1)) +
   theme_classic() +
@@ -185,11 +186,11 @@ ggplot(aes(x = Mes, y = Inflacion_total)) +
 # First we need to select, rename, filter, and transform 'Mes' in df2
 
 df2 = df2 |>
-  dplyr::select(Año, Mes, `Variacion Anual`) |> 
-  dplyr::rename(Inflacion_core = `Variacion Anual`) |> 
-  dplyr::filter(Año >= 2020) |> 
+  dplyr::select(ano, mes, variacion_anual) |> 
+  dplyr::rename(inflacion_core = variacion_anual) |> 
+  dplyr::filter(ano >= 2020) |> 
   dplyr::mutate(
-    Mes = recode(Mes,
+    mes = recode(mes,
                  "Enero" = 01, "Febrero" = 02,
                  "Marzo" = 03, "Abril" = 04,
                  "Mayo" = 05, "Junio" = 06,
@@ -204,11 +205,11 @@ df2 = df2 |>
 shadedarea <- 3  #Targeting inflation by Colombian Central bank
 
 df2 |> 
-ggplot(aes(x = Mes, y = Inflacion_core)) +
+ggplot(aes(x = mes, y = inflacion_core)) +
   geom_point() +
   geom_line() +
   geom_hline(yintercept = shadedarea, color = "grey", lwd = 22, alpha = 0.4) +
-  facet_grid( . ~ Año) +
+  facet_grid( . ~ ano) +
   scale_x_continuous(breaks = seq(0,12, by=2)) +
   scale_y_continuous(breaks = seq(0,12, by=1)) +
   theme_classic() +
@@ -229,11 +230,11 @@ ggplot(aes(x = Mes, y = Inflacion_core)) +
 shadedarea <- 3  #Targeting inflation by Colombian Central bank
 
 data |> 
-ggplot(aes(x = Mes, y = value, colour = Inflation_type)) +
+ggplot(aes(x = mes, y = value, colour = inflation_type)) +
   geom_point() +
   geom_line() +
   geom_hline(yintercept = shadedarea, color = "grey", lwd = 16, alpha = 0.4) +
-  facet_grid( . ~ Año) +
+  facet_grid( . ~ ano) +
   scale_x_continuous(breaks = seq(0,12, by=2)) +
   scale_y_continuous(breaks = seq(0,14, by=1)) +
   theme_classic() +
@@ -250,4 +251,4 @@ ggplot(aes(x = Mes, y = value, colour = Inflation_type)) +
 
 ## Conclusion
 
-As you can see in the hard years of the pandemic (2020, 2021) the inflation measurements remained quite stable in the targeting inflation policy by the independent Colombian central bank: Banco de la República ([Banrep](https://www.banrep.gov.co/es/glosario/inflacion-objetivo)) or even a few periods below the targeting (represented by the gray shaded area). Although the following years due to the rebound effect of the national economy, we are still observing high inflation in the goods and services of the economy. This is an ongoing concern because this not only affect households, but also companies, governments and other agents in the economy. In other hand, the Colombian Banrep board of directors are expecting the return of the targeting inflation in the year 2025 according to the [last minutes](https://www.banrep.gov.co/es/noticias/minutas-banrep-enero-2025).
+As you can see in the hard years of the pandemic (2020, 2021) the inflation measurements remained quite stable in the targeting inflation policy by the independent Colombian central bank: Banco de la República ([Banrep](https://www.banrep.gov.co/es/glosario/inflacion-objetivo)) or even a few periods below the targeting (represented by the gray shaded area). Although the following years due to the rebound effect of the national economy, we are still observing high inflation in the goods and services of the economy. This is an ongoing concern because this not only affect households, but also companies, governments and other agents in the economy. In other hand, the Colombian Banrep board of directors are expecting the return of the targeting inflation in the year 2025 according to the [last minutes](https://www.banrep.gov.co/es/noticias/minutas-banrep-octubre-2025).
